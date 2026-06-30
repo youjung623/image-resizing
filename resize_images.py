@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 누끼 이미지를 각 채널사별 규격에 맞게 자동 리사이징
-누끼 이미지의 상품 크기/위치를 그대로 유지하면서 리사이징
+예시 결과물의 상품 크기/위치와 동일하게 배치
 """
 
 from PIL import Image
@@ -25,9 +25,9 @@ CHANNEL_SPECS = {
     },
     '무신사': {
         'sizes': [(1500, 1800)],
-        'example_path': '무신사/SLG',
-        'output_path': '썸네일/무신사/SLG',
-        'has_color_folder': False,
+        'example_path': '무신사',
+        'output_path': '썸네일/무신사',
+        'has_color_folder': True,
     },
     '코오롱몰': {
         'sizes': [(1500, 2250)],
@@ -47,21 +47,11 @@ def remove_white_background(image):
     return Image.fromarray(pixels, 'RGBA')
 
 
-def crop_product(image):
-    """투명한 부분을 제거하고 상품만 남김"""
-    bbox = image.getbbox()
-    if bbox:
-        return image.crop(bbox)
-    return image
-
-
-def analyze_product_position(nuki_img):
-    """누끼 이미지에서 상품의 크기와 위치를 분석"""
-    # 배경 제거
-    transparent = remove_white_background(nuki_img)
+def analyze_product_position(img):
+    """이미지에서 상품의 크기와 위치를 분석"""
+    transparent = remove_white_background(img)
     arr = np.array(transparent)
 
-    # 알파값이 200 이상인 부분(상품)만 찾기
     product_mask = arr[:, :, 3] > 200
     coords = np.argwhere(product_mask)
 
@@ -71,82 +61,82 @@ def analyze_product_position(nuki_img):
     min_y, min_x = coords.min(axis=0)
     max_y, max_x = coords.max(axis=0)
 
-    orig_width, orig_height = nuki_img.size
-
     return {
         'x': int(min_x),
         'y': int(min_y),
         'width': int(max_x - min_x + 1),
         'height': int(max_y - min_y + 1),
-        'orig_width': orig_width,
-        'orig_height': orig_height,
     }
 
 
-def resize_to_spec(nuki_img, target_width, target_height, product_position):
-    """누끼 이미지의 상품 위치와 크기를 원본 비율로 유지하면서 리사이징"""
-    if not product_position:
+def get_example_files_with_positions(example_product_path: Path, color_name: str, target_size: Tuple[int, int]) -> Dict[str, Dict]:
+    """예시 폴더에서 파일명과 상품 위치를 함께 가져오기"""
+    result = {}
+
+    # 해당 색상 폴더 찾기
+    color_dir = example_product_path / color_name
+    if not color_dir.exists():
+        return result
+
+    # 파일별 상품 위치 분석
+    for file in sorted(color_dir.glob('*.jpg')):
+        # 모델컷 제외
+        if 'IC' in file.name:
+            continue
+
+        img = Image.open(file)
+        if img.size != target_size:
+            continue
+
+        product_pos = analyze_product_position(img)
+        if product_pos:
+            result[file.name] = product_pos
+
+    return result
+
+
+def resize_with_example_position(nuki_img, target_width, target_height, nuki_product_pos, example_product_pos):
+    """누끼 이미지를 예시의 상품 위치에 맞게 리사이징"""
+    if not nuki_product_pos or not example_product_pos:
         return None
 
-    orig_width = product_position['orig_width']
-    orig_height = product_position['orig_height']
+    # 누끼에서 상품 부분 추출
+    nuki_transparent = remove_white_background(nuki_img)
 
-    # 스케일 계산 (누끼 원본 → 타겟)
-    scale_x = target_width / orig_width
-    scale_y = target_height / orig_height
+    nuki_x = nuki_product_pos['x']
+    nuki_y = nuki_product_pos['y']
+    nuki_w = nuki_product_pos['width']
+    nuki_h = nuki_product_pos['height']
+    nuki_aspect = nuki_w / nuki_h if nuki_h > 0 else 1.0
 
-    # 누끼 이미지 전체를 타겟 크기로 리사이징
-    resized_nuki = nuki_img.resize((target_width, target_height), Image.Resampling.LANCZOS)
+    # 상품 부분 추출
+    product_crop = nuki_transparent.crop((nuki_x, nuki_y, nuki_x + nuki_w, nuki_y + nuki_h))
 
-    # 배경 투명화
-    resized_transparent = remove_white_background(resized_nuki)
+    # 예시의 상품 크기와 위치
+    example_x = example_product_pos['x']
+    example_y = example_product_pos['y']
+    example_w = example_product_pos['width']
+    example_h = example_product_pos['height']
+
+    # 누끼의 상품 비율을 유지하면서 예시 높이에 맞추기
+    resized_w = int(example_h * nuki_aspect)
+    resized_h = example_h
+
+    # 너비가 예시를 벗어나면 예시 너비에 맞추기
+    if resized_w > example_w:
+        resized_w = example_w
+        resized_h = int(resized_w / nuki_aspect)
+
+    # 상품 리사이징
+    resized_product = product_crop.resize((resized_w, resized_h), Image.Resampling.LANCZOS)
 
     # 캔버스 생성
     canvas = Image.new('RGB', (target_width, target_height), 'white')
 
-    # 리사이징된 누끼 이미지를 캔버스에 붙이기 (위치 유지)
-    canvas.paste(resized_transparent, (0, 0), resized_transparent)
+    # 예시 위치에 배치
+    canvas.paste(resized_product, (example_x, example_y), resized_product)
 
     return canvas
-
-
-def get_example_filenames(example_product_path: Path, has_color_folder: bool, target_size: Tuple[int, int]) -> list:
-    """예시 폴더에서 해당 크기의 파일명 가져오기 (상품 이미지만, 모델컷 제외)"""
-    filenames = []
-
-    if has_color_folder:
-        # 색상 폴더가 있으면 첫 번째 색상 폴더만 사용
-        color_dirs = sorted([d for d in example_product_path.iterdir() if d.is_dir()])
-        if not color_dirs:
-            return filenames
-
-        first_color_dir = color_dirs[0]
-        for file in sorted(first_color_dir.glob('*.jpg')):
-            # 모델컷 제외 (IC- 포함된 파일 제외)
-            if 'IC' in file.name:
-                continue
-
-            # 썸네일 포함
-            if '썸네일' in file.name:
-                img = Image.open(file)
-                if img.size == target_size:
-                    filenames.append(file.name)
-                continue
-
-            img = Image.open(file)
-            if img.size == target_size:
-                filenames.append(file.name)
-    else:
-        for file in sorted(example_product_path.glob('*.jpg')):
-            # 모델컷 제외
-            if 'IC' in file.name:
-                continue
-
-            img = Image.open(file)
-            if img.size == target_size:
-                filenames.append(file.name)
-
-    return filenames
 
 
 def main():
@@ -179,9 +169,9 @@ def main():
             if not nuki_images:
                 continue
 
-            # 각 누끼 이미지의 상품 위치 분석 (첫 번째만 사용)
+            # 첫 번째 누끼 이미지의 상품 위치 분석
             first_nuki = Image.open(nuki_images[0])
-            product_position = analyze_product_position(first_nuki)
+            nuki_product_pos = analyze_product_position(first_nuki)
 
             # 각 채널사별 처리
             for channel_name, channel_info in CHANNEL_SPECS.items():
@@ -197,14 +187,14 @@ def main():
                 for target_size in channel_info['sizes']:
                     print(f"      {target_size[0]}x{target_size[1]}")
 
-                    # 예시 파일명 가져오기
-                    example_filenames = get_example_filenames(
+                    # 예시 파일과 상품 위치 가져오기
+                    example_files = get_example_files_with_positions(
                         example_product_path,
-                        channel_info['has_color_folder'],
+                        color_name,
                         target_size
                     )
 
-                    if not example_filenames:
+                    if not example_files:
                         print(f"        예시 파일 없음")
                         continue
 
@@ -218,11 +208,18 @@ def main():
                     output_product_path.mkdir(parents=True, exist_ok=True)
 
                     # 누끼 이미지 리사이징
+                    example_filenames = sorted(example_files.keys())
                     for nuki_img_path, example_filename in zip(nuki_images, example_filenames):
                         nuki_img = Image.open(nuki_img_path)
 
-                        # 리사이징
-                        resized = resize_to_spec(nuki_img, target_size[0], target_size[1], product_position)
+                        # 리사이징 (예시 위치에 맞게)
+                        resized = resize_with_example_position(
+                            nuki_img,
+                            target_size[0],
+                            target_size[1],
+                            nuki_product_pos,
+                            example_files[example_filename]
+                        )
 
                         # 저장
                         if resized:
