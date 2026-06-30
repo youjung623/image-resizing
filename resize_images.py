@@ -115,23 +115,27 @@ def get_example_filenames(example_product_path: Path, has_color_folder: bool, ta
     filenames = []
 
     if has_color_folder:
-        for color_dir in example_product_path.iterdir():
-            if not color_dir.is_dir():
+        # 색상 폴더가 있으면 첫 번째 색상 폴더만 사용
+        color_dirs = sorted([d for d in example_product_path.iterdir() if d.is_dir()])
+        if not color_dirs:
+            return filenames
+
+        first_color_dir = color_dirs[0]
+        for file in sorted(first_color_dir.glob('*.jpg')):
+            # 모델컷 제외 (IC- 포함된 파일 제외)
+            if 'IC' in file.name:
                 continue
 
-            for file in sorted(color_dir.glob('*.jpg')):
-                # 모델컷 제외 (ICB-, ICS- 등 포함된 파일 제외)
-                if 'IC' in file.name or '썸네일' in file.name:
-                    # 썸네일은 포함 (상품 썸네일)
-                    if '썸네일' in file.name:
-                        img = Image.open(file)
-                        if img.size == target_size:
-                            filenames.append(file.name)
-                    continue
-
+            # 썸네일 포함
+            if '썸네일' in file.name:
                 img = Image.open(file)
                 if img.size == target_size:
                     filenames.append(file.name)
+                continue
+
+            img = Image.open(file)
+            if img.size == target_size:
+                filenames.append(file.name)
     else:
         for file in sorted(example_product_path.glob('*.jpg')):
             # 모델컷 제외
