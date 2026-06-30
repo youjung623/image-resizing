@@ -208,18 +208,21 @@ def main():
                     )
                     output_product_path.mkdir(parents=True, exist_ok=True)
 
-                    # 누끼 이미지 리사이징
+                    # 첫 번째 예시 파일의 상품 위치를 모든 누끼에 적용
                     example_filenames = sorted(example_files.keys())
+                    first_example_pos = example_files[example_filenames[0]]
+
+                    # 누끼 이미지 리사이징
                     for nuki_img_path, example_filename in zip(nuki_images, example_filenames):
                         nuki_img = Image.open(nuki_img_path)
 
-                        # 리사이징 (예시 위치에 맞게)
+                        # 리사이징 (첫 번째 예시 위치에만 맞게)
                         resized = resize_with_example_position(
                             nuki_img,
                             target_size[0],
                             target_size[1],
                             nuki_product_pos,
-                            example_files[example_filename]
+                            first_example_pos
                         )
 
                         # 저장
