@@ -83,8 +83,8 @@ def main():
 
     work_path.mkdir(exist_ok=True)
 
-    # 예시 이미지 분석 (첫 번째 jpg)
-    example_files = sorted(example_path.glob('*.jpg'))
+    # 예시 이미지 분석 (첫 번째 jpg, 하위 폴더 포함)
+    example_files = sorted(example_path.rglob('*.jpg'))
     if not example_files:
         print("❌ example 폴더에 jpg 파일이 없습니다")
         return
@@ -101,8 +101,8 @@ def main():
     print(f"예시 캔버스 크기: {example_canvas_size[0]}x{example_canvas_size[1]}")
     print(f"예시 상품 위치: x={ex_x1}~{ex_x2}, y={ex_y1}~{ex_y2} (크기: {ex_x2-ex_x1}x{ex_y2-ex_y1})")
 
-    # 원본 이미지 처리
-    original_files = sorted(original_path.glob('*.jpg'))
+    # 원본 이미지 처리 (하위 폴더 포함)
+    original_files = sorted(original_path.rglob('*.jpg'))
     if not original_files:
         print("❌ original 폴더에 jpg 파일이 없습니다")
         return
