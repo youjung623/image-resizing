@@ -69,6 +69,10 @@ def resize_to_match_example(original_img, example_bbox, example_canvas_size):
     return canvas
 
 
+EXAMPLE_FILENAME = '1.jpg'
+ORIGINAL_FILENAME = '420.jpg'
+
+
 def main():
     example_path = Path('example')
     original_path = Path('original')
@@ -83,13 +87,16 @@ def main():
 
     work_path.mkdir(exist_ok=True)
 
-    # 예시 이미지 분석 (첫 번째 jpg, 하위 폴더 포함)
-    example_files = sorted(example_path.rglob('*.jpg'))
+    # 예시 이미지 찾기
+    example_files = list(example_path.rglob(EXAMPLE_FILENAME))
     if not example_files:
-        print("❌ example 폴더에 jpg 파일이 없습니다")
+        print(f"❌ example 폴더에서 {EXAMPLE_FILENAME}을 찾을 수 없습니다")
         return
 
-    example_img = Image.open(example_files[0])
+    example_file = example_files[0]
+    print(f"예시 파일: {example_file}")
+
+    example_img = Image.open(example_file)
     example_canvas_size = example_img.size
     example_bbox = find_product_bbox(example_img)
 
@@ -101,25 +108,27 @@ def main():
     print(f"예시 캔버스 크기: {example_canvas_size[0]}x{example_canvas_size[1]}")
     print(f"예시 상품 위치: x={ex_x1}~{ex_x2}, y={ex_y1}~{ex_y2} (크기: {ex_x2-ex_x1}x{ex_y2-ex_y1})")
 
-    # 원본 이미지 처리 (하위 폴더 포함)
-    original_files = sorted(original_path.rglob('*.jpg'))
+    # 원본 이미지 찾기
+    original_files = list(original_path.rglob(ORIGINAL_FILENAME))
     if not original_files:
-        print("❌ original 폴더에 jpg 파일이 없습니다")
+        print(f"❌ original 폴더에서 {ORIGINAL_FILENAME}을 찾을 수 없습니다")
         return
 
     print(f"\n원본 이미지 처리 중...")
     for original_file in original_files:
+        print(f"원본 파일: {original_file}")
         original_img = Image.open(original_file)
         orig_bbox = find_product_bbox(original_img)
         if orig_bbox:
             ox1, oy1, ox2, oy2 = orig_bbox
-            print(f"  {original_file.name}: 상품 위치 x={ox1}~{ox2}, y={oy1}~{oy2} (크기: {ox2-ox1}x{oy2-oy1})")
+            print(f"원본 이미지 크기: {original_img.width}x{original_img.height}")
+            print(f"원본 상품 위치: x={ox1}~{ox2}, y={oy1}~{oy2} (크기: {ox2-ox1}x{oy2-oy1})")
 
         result = resize_to_match_example(original_img, example_bbox, example_canvas_size)
         if result:
             output_file = work_path / original_file.name
             result.save(output_file, 'JPEG', quality=95)
-            print(f"  저장 완료: {output_file}")
+            print(f"저장 완료: {output_file}")
 
     print(f"\n✅ 완료!")
 
