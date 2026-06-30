@@ -77,29 +77,56 @@ def analyze_product_position(nuki_img):
     }
 
 
-def resize_to_spec(nuki_img, target_width, target_height, product_position):
-    """누끼 이미지의 상품 위치를 그대로 유지하면서 리사이징"""
-    if not product_position:
+def analyze_example_product_position(example_img):
+    """예시 이미지에서 상품의 위치 분석"""
+    transparent = remove_white_background(example_img)
+    arr = np.array(transparent)
+
+    product_mask = arr[:, :, 3] > 200
+    coords = np.argwhere(product_mask)
+
+    if len(coords) == 0:
         return None
 
-    # 스케일 계산
-    scale_x = target_width / product_position['orig_width']
-    scale_y = target_height / product_position['orig_height']
+    min_y, min_x = coords.min(axis=0)
+    max_y, max_x = coords.max(axis=0)
 
-    # 누끼 이미지 리사이징
-    resized_nuki = nuki_img.resize(
-        (target_width, target_height),
-        Image.Resampling.LANCZOS
-    )
+    return {
+        'x': int(min_x),
+        'y': int(min_y),
+        'width': int(max_x - min_x + 1),
+        'height': int(max_y - min_y + 1),
+    }
 
-    # 투명 배경 제거
-    resized_transparent = remove_white_background(resized_nuki)
+
+def resize_to_spec(nuki_img, target_width, target_height, product_position, example_product_position):
+    """누끼 이미지의 상품을 예시 위치에 맞게 리사이징"""
+    if not product_position or not example_product_position:
+        return None
+
+    # 누끼에서 상품 부분 추출
+    nuki_transparent = remove_white_background(nuki_img)
+    nuki_x = product_position['x']
+    nuki_y = product_position['y']
+    nuki_w = product_position['width']
+    nuki_h = product_position['height']
+
+    # 상품 영역 크롭
+    product_crop = nuki_transparent.crop((nuki_x, nuki_y, nuki_x + nuki_w, nuki_y + nuki_h))
+
+    # 예시의 상품 크기에 맞게 리사이징
+    example_x = example_product_position['x']
+    example_y = example_product_position['y']
+    example_w = example_product_position['width']
+    example_h = example_product_position['height']
+
+    resized_product = product_crop.resize((example_w, example_h), Image.Resampling.LANCZOS)
 
     # 캔버스 생성
     canvas = Image.new('RGB', (target_width, target_height), 'white')
 
-    # 리사이징된 이미지를 캔버스에 붙이기
-    canvas.paste(resized_transparent, (0, 0), resized_transparent)
+    # 예시 위치에 상품 배치
+    canvas.paste(resized_product, (example_x, example_y), resized_product)
 
     return canvas
 
@@ -198,6 +225,37 @@ def main():
                         print(f"        예시 파일 없음")
                         continue
 
+                    # 예시 이미지의 첫 번째 파일에서 상품 위치 분석
+                    first_example_file = None
+                    if channel_info['has_color_folder']:
+                        color_dirs = list(example_product_path.iterdir())
+                        for color_dir in color_dirs:
+                            if color_dir.is_dir():
+                                files = sorted(color_dir.glob('*.jpg'))
+                                for file in files:
+                                    if 'IC' not in file.name and file.name in example_filenames:
+                                        first_example_file = file
+                                        break
+                            if first_example_file:
+                                break
+                    else:
+                        files = sorted(example_product_path.glob('*.jpg'))
+                        for file in files:
+                            if 'IC' not in file.name and file.name in example_filenames:
+                                first_example_file = file
+                                break
+
+                    if not first_example_file:
+                        print(f"        예시 파일 찾기 실패")
+                        continue
+
+                    example_img = Image.open(first_example_file)
+                    example_product_position = analyze_example_product_position(example_img)
+
+                    if not example_product_position:
+                        print(f"        예시에서 상품 위치 분석 실패")
+                        continue
+
                     # 출력 폴더
                     output_product_path = (
                         output_path /
@@ -212,7 +270,7 @@ def main():
                         nuki_img = Image.open(nuki_img_path)
 
                         # 리사이징
-                        resized = resize_to_spec(nuki_img, target_size[0], target_size[1], product_position)
+                        resized = resize_to_spec(nuki_img, target_size[0], target_size[1], product_position, example_product_position)
 
                         # 저장
                         if resized:
