@@ -69,14 +69,16 @@ def analyze_product_position(img):
     }
 
 
-def get_example_files_with_positions(example_product_path: Path, color_name: str, target_size: Tuple[int, int]) -> Dict[str, Dict]:
+def get_example_files_with_positions(example_product_path: Path, target_size: Tuple[int, int]) -> Dict[str, Dict]:
     """예시 폴더에서 파일명과 상품 위치를 함께 가져오기"""
     result = {}
 
-    # 해당 색상 폴더 찾기
-    color_dir = example_product_path / color_name
-    if not color_dir.exists():
+    # 첫 번째 색상 폴더 찾기 (색상 이름은 무시)
+    color_dirs = sorted([d for d in example_product_path.iterdir() if d.is_dir()])
+    if not color_dirs:
         return result
+
+    color_dir = color_dirs[0]
 
     # 파일별 상품 위치 분석
     for file in sorted(color_dir.glob('*.jpg')):
@@ -190,7 +192,6 @@ def main():
                     # 예시 파일과 상품 위치 가져오기
                     example_files = get_example_files_with_positions(
                         example_product_path,
-                        color_name,
                         target_size
                     )
 
